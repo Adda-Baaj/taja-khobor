@@ -1,0 +1,18 @@
+publishers:
+  - id: primary-sqs
+    type: sqs
+    enabled: true
+    sqs:
+      uri: "https://sqs.ap-south-1.amazonaws.com/1234567890/link-events"
+      region: "ap-south-1"
+
+  - id: kafka-events
+    type: kafka
+    enabled: false
+    kafka:
+      brokers:
+        - kafka1:9092
+        - kafka2:9092
+      topic: "link-events"
+
+# Note: Do NOT commit actual credentials into this file. Keep secrets in env or secret manager.

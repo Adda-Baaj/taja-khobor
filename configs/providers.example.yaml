@@ -1,0 +1,14 @@
+providers:
+  - id: example
+    name: Example Provider
+    type: https
+    source_url: https://example.com/api
+    response_format: json
+    request_delay_ms: 500
+    config:
+      user_agent: MyCrawler/1.0 (+https://example.com)
+      accept: application/json
+      accept_language: en-US,en;q=0.9
+
+
+# Note: Do NOT commit actual credentials into this file. Keep secrets in env or secret manager.
