@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Adda-Baaj/taja-khobor/internal/domain"
@@ -16,15 +18,14 @@ import (
 )
 
 const (
-	maxHTMLBodyBytes = 1 << 20 // 1 MiB
+	maxHTMLBodyBytes  = 1 << 20 // 1 MiB
+	maxArticleWorkers = 10
 )
 
-// Scraper fetches article pages and extracts metadata from OG tags.
 type Scraper struct {
 	client httpclient.Client
 }
 
-// NewScraper constructs a scraper with the provided HTTP client (or default).
 func NewScraper(client httpclient.Client) *Scraper {
 	if client == nil {
 		client = providers.DefaultHTTPClient()
@@ -32,47 +33,91 @@ func NewScraper(client httpclient.Client) *Scraper {
 	return &Scraper{client: client}
 }
 
-// Enrich iterates articles, fetching each page (with throttling) and merging OG metadata.
 func (s *Scraper) Enrich(ctx context.Context, cfg providers.Provider, articles []domain.Article) []domain.Article {
 	delay := cfg.RequestDelay()
-	// seed output with originals so we can return what we have on abort
-	out := append([]domain.Article(nil), articles...)
+	out := make([]domain.Article, len(articles))
+	copy(out, articles) // default to originals so partial results are returned on cancel
 
-	for i, art := range articles {
-		select {
-		case <-ctx.Done():
-			return out[:i]
-		default:
+	if len(articles) == 0 {
+		return out
+	}
+
+	workerCount := min(len(articles), maxArticleWorkers)
+
+	var limiter <-chan time.Time
+	var ticker *time.Ticker
+	if delay > 0 {
+		ticker = time.NewTicker(delay)
+		limiter = ticker.C
+		defer ticker.Stop()
+	}
+
+	jobCh := make(chan int)
+	var wg sync.WaitGroup
+
+	for range workerCount {
+		wg.Add(1)
+		go s.articleWorker(ctx, cfg, articles, limiter, jobCh, out, &wg)
+	}
+
+	for idx := range articles {
+		if ctx.Err() != nil {
+			break
+		}
+		jobCh <- idx
+	}
+	close(jobCh)
+
+	wg.Wait()
+
+	return out
+}
+
+func (s *Scraper) articleWorker(
+	ctx context.Context,
+	cfg providers.Provider,
+	articles []domain.Article,
+	limiter <-chan time.Time,
+	jobCh <-chan int,
+	out []domain.Article,
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+
+	for idx := range jobCh {
+		if ctx.Err() != nil {
+			return
 		}
 
-		enriched, err := s.fetchAndParse(ctx, cfg, art)
-		if err != nil {
+		if limiter != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-limiter:
+			}
+		}
+
+		art := articles[idx]
+		if enriched, err := s.fetchAndParse(ctx, cfg, art); err != nil {
 			logger.WarnObj("article metadata scrape failed", "metadata_error", map[string]any{
 				"provider_id": cfg.ID,
 				"url":         art.URL,
 				"error":       err.Error(),
 			})
-			out[i] = art
+			out[idx] = art
 		} else {
-			out[i] = enriched
-		}
-
-		if delay > 0 && i < len(articles)-1 {
-			timer := time.NewTimer(delay)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return out[:i+1]
-			case <-timer.C:
-			}
+			out[idx] = enriched
 		}
 	}
-
-	return out
 }
 
 func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art domain.Article) (domain.Article, error) {
 	headers := providers.Headers(cfg)
+
+	logger.InfoObj("scraping article metadata", "scrape_start", map[string]any{
+		"provider_id": cfg.ID,
+		"url":         art.URL,
+	})
 
 	resp, err := s.client.Get(ctx, art.URL, headers)
 	if err != nil {
@@ -89,6 +134,12 @@ func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art
 
 	body := resp.Body()
 	if len(body) > maxHTMLBodyBytes {
+		logger.InfoObj("html body truncated", "truncation", map[string]any{
+			"provider_id": cfg.ID,
+			"url":         art.URL,
+			"original":    len(body),
+			"kept":        maxHTMLBodyBytes,
+		})
 		body = body[:maxHTMLBodyBytes]
 	}
 
@@ -104,7 +155,7 @@ func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art
 		updated.Description = meta.Description
 	}
 	if meta.ImageURL != "" {
-		updated.ImageURL = meta.ImageURL
+		updated.ImageURL = resolveURL(meta.ImageURL, art.URL)
 	}
 
 	return updated, nil
@@ -153,4 +204,25 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func resolveURL(raw, base string) string {
+	if raw == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	if parsed.IsAbs() {
+		return parsed.String()
+	}
+
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return raw
+	}
+
+	return baseURL.ResolveReference(parsed).String()
 }

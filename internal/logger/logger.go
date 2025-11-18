@@ -8,10 +8,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Package-level logger to be used across packages after Init.
 var S *zap.SugaredLogger
 
-// Init initializes a zap SugaredLogger using settings from config.
 func Init(cfg *config.Config) (*zap.SugaredLogger, error) {
 	var level zapcore.Level
 	switch cfg.LogLevel {
@@ -43,7 +41,6 @@ func Init(cfg *config.Config) (*zap.SugaredLogger, error) {
 	return sugar, nil
 }
 
-// Close flushes any buffered loggers.
 func Close() error {
 	if S == nil {
 		return nil
@@ -51,9 +48,6 @@ func Close() error {
 	return S.Sync()
 }
 
-// Minimal object logging helpers -------------------------------------------------
-// These are tiny wrappers that log the given object as a structured field named
-// `key` and do not attempt to parse arbitrary kv arrays.
 func InfoObj(msg, key string, obj interface{}) {
 	if S == nil {
 		return

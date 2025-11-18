@@ -1,20 +1,20 @@
 # taja-khobor
 
-Taja Khobor is an open-source Go microservice that periodically fetches links from news sitemaps/RSS feeds, extracts basic metadata, and emits lightweight `link_collected` events to a downstream queue. It is designed to be provider-pluggable and easy to run locally or in a container.
+Taja Khobor is an open-source Go microservice that periodically collects news links, enriches them with basic metadata, and emits lightweight events downstream. It is built to stay small, composable, and friendly to new contributors.
 
-## Features
-- Provider-agnostic crawling via small fetcher interfaces (each provider in its own file).
-- Configurable headers (User-Agent, Accept, etc.) per provider via YAML (no hardcoded defaults).
-- Per-provider throttling (`request_delay_ms`) to avoid hammering sources.
-- HTML metadata enrichment using goquery (OG/title/description/image) after fetching article links.
-- Shared HTTP client abstraction (resty under the hood) for providers and scraper.
-- Zap-based structured logging; publisher/storage layers are stubbed for now.
+## What it does (current state)
+- Pluggable providers: each source implements the `pkg/providers.Fetcher` interface and is wired through a registry. Today NDTV and TOI Google News sitemaps are supported.
+- Config-driven crawling: providers are declared in YAML/JSON with per-provider headers (User-Agent, Accept, etc.) and `request_delay_ms` throttling.
+- Link extraction: provider fetchers pull URLs from sitemaps/RSS. Common helpers handle Google News sitemap parsing and article ID generation.
+- Metadata enrichment: fetched links are optionally enriched from OG/title/description/image tags with goquery; cancellation returns whatever was processed so far.
+- Shared HTTP client abstraction (resty under the hood) and centralized header builder.
+- Structured logging with zap; publisher/storage layers remain stubs for contributors to extend.
 
 ## Quickstart
 Prereqs: Go 1.22+.
 
 ```bash
-cp configs/providers.yaml configs/providers.local.yaml  # optional copy to tweak locally
+cp configs/providers.yaml configs/providers.local.yaml  # tweak locally if needed
 go run ./cmd/collector
 ```
 
@@ -25,7 +25,7 @@ Environment defaults (overridable via env vars):
 - `CRAWL_INTERVAL` (default `15m`)
 
 ## Configuring providers
-Providers live in `configs/providers.yaml`. Example (NDTV):
+Providers live in `configs/providers.yaml` (YAML or JSON is accepted). Example:
 
 ```yaml
 providers:
@@ -34,29 +34,33 @@ providers:
     type: https
     source_url: https://www.ndtv.com/sitemap/google-news-sitemap
     response_format: xml
-    request_delay_ms: 500                # throttle between article fetches
+    request_delay_ms: 500
     config:
-      user_agent: <required>              # you must set this; headers are never defaulted
+      user_agent: <required>   # always set this; headers are never defaulted
       accept: <optional>
       accept_language: <optional>
       cache_control: <optional>
 ```
 
-Add new providers by creating a fetcher that implements `pkg/providers.Fetcher`, then register it in `DefaultFetcherRegistry` and add an entry to the YAML.
+Adding a provider:
+1. Implement `pkg/providers.Fetcher` in a new file (keep provider-specific logic isolated).
+2. Register it in `pkg/providers.DefaultFetcherRegistry`.
+3. Add the provider entry to `configs/providers.yaml`.
 
 ## Project layout
 ```
 cmd/collector/          # entrypoint
 internal/config         # viper/env config loader
-internal/crawler        # orchestrates provider fetchers
+internal/crawler        # orchestrates provider fetchers + enrichment
 internal/logger         # zap setup and helpers
 pkg/httpclient          # shared HTTP client interfaces + resty adapter
-pkg/providers           # provider registry, fetcher interfaces, provider impls
+pkg/providers           # provider registry, fetcher interfaces, provider impls, sitemap helpers
 pkg/publisher           # outbound publisher stub
 configs/                # provider and app config examples
 ```
 
-## Development
-- Run tests: `go test ./...` (use `GOCACHE=$(pwd)/.gocache` if your env restricts the default cache path).
-- Code style: `gofmt` before submitting.
-- Contributions: please open issues/PRs with a clear description and tests where applicable. Keep provider-specific logic in its own file and wire it via the fetcher registry to preserve the pluggable design.
+## Contributing
+- Open to PRs and issues; keep changes small and focused.
+- Prefer one file per provider, registered via the fetcher registry to preserve pluggability.
+- Run `gofmt` and `go test ./...` before submitting.
+- Discussions and improvements around storage/publishing/backoff are welcome—those layers are intentionally minimal today.

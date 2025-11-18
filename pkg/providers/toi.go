@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/Adda-Baaj/taja-khobor/internal/domain"
@@ -36,53 +35,20 @@ func (f *toiFetcher) Fetch(ctx context.Context, cfg Provider) ([]domain.Article,
 		return nil, fmt.Errorf("toi provider source_url is empty")
 	}
 
-	raw, err := f.download(ctx, cfg)
+	headers := Headers(cfg)
+
+	raw, err := fetchSitemap(ctx, f.client, cfg.SourceURL, toiProviderID, headers)
 	if err != nil {
 		return nil, err
 	}
 
 	urls, err := parseGoogleNewsSitemap(raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode google news sitemap: %w", err)
 	}
-
-	articles := make([]domain.Article, 0, len(urls))
-	for _, entry := range urls {
-		loc := strings.TrimSpace(entry.Loc)
-		if loc == "" {
-			continue
-		}
-		title := strings.TrimSpace(entry.NewsTitle)
-		if title == "" {
-			title = loc
-		}
-
-		articles = append(articles, domain.Article{
-			ID:    hashURL(loc),
-			Title: title,
-			URL:   loc,
-		})
-	}
-
+	articles := buildArticlesFromSitemap(urls)
 	if len(articles) == 0 {
 		return nil, fmt.Errorf("toi sitemap returned no records")
 	}
-
 	return articles, nil
-}
-
-func (f *toiFetcher) download(ctx context.Context, cfg Provider) ([]byte, error) {
-	headers := Headers(cfg)
-
-	resp, err := f.client.Get(ctx, cfg.SourceURL, headers)
-	if err != nil {
-		return nil, fmt.Errorf("fetch toi sitemap: %w", err)
-	}
-
-	body := resp.Body()
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("toi sitemap returned status %d body: %s", resp.StatusCode(), responseSnippet(body))
-	}
-
-	return body, nil
 }
