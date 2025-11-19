@@ -24,18 +24,22 @@ func NewFanout(pubs []Publisher) *Fanout {
 }
 
 // Publish forwards the event to every registered publisher.
-func (f *Fanout) Publish(ctx context.Context, evt Event) error {
+// It returns the number of publishers that successfully handled the event.
+func (f *Fanout) Publish(ctx context.Context, evt Event) (int, error) {
 	if f == nil || len(f.publishers) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	var errs []error
+	successful := 0
 	for _, p := range f.publishers {
 		if err := p.Publish(ctx, evt); err != nil {
 			errs = append(errs, fmt.Errorf("%s publisher[%s]: %w", p.Type(), p.ID(), err))
+		} else {
+			successful++
 		}
 	}
-	return errors.Join(errs...)
+	return successful, errors.Join(errs...)
 }
 
 // Size returns the number of active publishers.

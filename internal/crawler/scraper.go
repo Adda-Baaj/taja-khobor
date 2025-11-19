@@ -22,11 +22,13 @@ const (
 	maxArticleWorkers = 10
 )
 
+// Scraper fetches and enriches article metadata by scraping HTML pages.
 type Scraper struct {
 	client httpclient.Client
 	log    logger.Logger
 }
 
+// NewScraper creates a new Scraper with the given HTTP client and logger.
 func NewScraper(client httpclient.Client, log logger.Logger) *Scraper {
 	if client == nil {
 		client = providers.DefaultHTTPClient()
@@ -37,6 +39,7 @@ func NewScraper(client httpclient.Client, log logger.Logger) *Scraper {
 	return &Scraper{client: client, log: log}
 }
 
+// Enrich enriches the given articles by scraping their HTML pages for metadata.
 func (s *Scraper) Enrich(ctx context.Context, cfg providers.Provider, articles []domain.Article) []domain.Article {
 	delay := cfg.RequestDelay()
 	out := make([]domain.Article, len(articles))
@@ -59,9 +62,9 @@ func (s *Scraper) Enrich(ctx context.Context, cfg providers.Provider, articles [
 	jobCh := make(chan int)
 	var wg sync.WaitGroup
 
-	for range workerCount {
+	for workerID := range workerCount {
 		wg.Add(1)
-		go s.articleWorker(ctx, cfg, articles, limiter, jobCh, out, &wg)
+		go s.articleWorker(ctx, cfg, articles, limiter, jobCh, out, &wg, workerID)
 	}
 
 	for idx := range articles {
@@ -77,6 +80,7 @@ func (s *Scraper) Enrich(ctx context.Context, cfg providers.Provider, articles [
 	return out
 }
 
+// articleWorker processes articles from the job channel, respecting the rate limiter, and enriches them by scraping metadata.
 func (s *Scraper) articleWorker(
 	ctx context.Context,
 	cfg providers.Provider,
@@ -85,6 +89,7 @@ func (s *Scraper) articleWorker(
 	jobCh <-chan int,
 	out []domain.Article,
 	wg *sync.WaitGroup,
+	workerID int,
 ) {
 	defer wg.Done()
 
@@ -102,8 +107,9 @@ func (s *Scraper) articleWorker(
 		}
 
 		art := articles[idx]
-		if enriched, err := s.fetchAndParse(ctx, cfg, art); err != nil {
+		if enriched, err := s.fetchAndParse(ctx, cfg, art, workerID); err != nil {
 			s.log.WarnObj("article metadata scrape failed", "metadata_error", map[string]any{
+				"worker_id":   workerID,
 				"provider_id": cfg.ID,
 				"url":         art.URL,
 				"error":       err.Error(),
@@ -115,10 +121,12 @@ func (s *Scraper) articleWorker(
 	}
 }
 
-func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art domain.Article) (domain.Article, error) {
+// fetchAndParse fetches the article HTML and parses metadata to enrich the article.
+func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art domain.Article, workerID int) (domain.Article, error) {
 	headers := providers.Headers(cfg)
 
 	s.log.InfoObj("scraping article metadata", "scrape_start", map[string]any{
+		"worker_id":   workerID,
 		"provider_id": cfg.ID,
 		"url":         art.URL,
 	})
@@ -139,6 +147,7 @@ func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art
 	body := resp.Body()
 	if len(body) > maxHTMLBodyBytes {
 		s.log.InfoObj("html body truncated", "truncation", map[string]any{
+			"worker_id":   workerID,
 			"provider_id": cfg.ID,
 			"url":         art.URL,
 			"original":    len(body),
@@ -165,6 +174,7 @@ func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art
 	return updated, nil
 }
 
+// parseMeta extracts page metadata from the HTML body.
 func parseMeta(body []byte) (pageMeta, error) {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
@@ -195,12 +205,14 @@ func parseMeta(body []byte) (pageMeta, error) {
 	return pm, nil
 }
 
+// pageMeta holds metadata extracted from an HTML page.
 type pageMeta struct {
 	Title       string
 	Description string
 	ImageURL    string
 }
 
+// firstNonEmpty returns the first non-empty string from the given values.
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
@@ -210,6 +222,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// resolveURL resolves a possibly relative URL against a base URL.
 func resolveURL(raw, base string) string {
 	if raw == "" {
 		return ""

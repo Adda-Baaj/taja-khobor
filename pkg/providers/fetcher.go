@@ -9,6 +9,7 @@ import (
 	"github.com/Adda-Baaj/taja-khobor/pkg/httpclient"
 )
 
+// fetcherRegistry implements FetcherRegistry.
 type fetcherRegistry struct {
 	fetchersByID   map[string]Fetcher
 	fetchersByType map[string]Fetcher
@@ -37,6 +38,7 @@ func NewTypeFetcherRegistry(typeFetchers map[string]Fetcher, fetchers ...Fetcher
 	return reg
 }
 
+// registerIDFetcher registers a fetcher by its provider ID.
 func (r *fetcherRegistry) registerIDFetcher(f Fetcher) {
 	if f == nil {
 		return
@@ -51,6 +53,7 @@ func (r *fetcherRegistry) registerIDFetcher(f Fetcher) {
 	r.mu.Unlock()
 }
 
+// registerTypeFetcher registers a fetcher by provider type.
 func (r *fetcherRegistry) registerTypeFetcher(typ string, f Fetcher) {
 	if f == nil {
 		return

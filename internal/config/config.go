@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Config holds the application configuration loaded from files and environment variables.
 type Config struct {
 	AppName              string        `mapstructure:"app_name"`
 	Env                  string        `mapstructure:"app_env"`
@@ -17,10 +18,15 @@ type Config struct {
 	CrawlIntervalSeconds int64         `mapstructure:"crawl_interval"`
 	CrawlInterval        time.Duration `mapstructure:"-"`
 
-	StorageType string `mapstructure:"storage_type"`
-	BBoltPath   string `mapstructure:"bbolt_path"`
+	StorageType            string        `mapstructure:"storage_type"`
+	BBoltPath              string        `mapstructure:"bbolt_path"`
+	StorageTTLSeconds      int64         `mapstructure:"storage_ttl_seconds"`
+	StorageCleanupSeconds  int64         `mapstructure:"storage_cleanup_interval_seconds"`
+	StorageTTL             time.Duration `mapstructure:"-"`
+	StorageCleanupInterval time.Duration `mapstructure:"-"`
 }
 
+// Load reads configuration from environment variables and config files.
 func Load() (*Config, error) {
 	_ = godotenv.Load("configs/.env")
 
@@ -34,6 +40,8 @@ func Load() (*Config, error) {
 	v.SetDefault("crawl_interval", 900) // seconds
 	v.SetDefault("storage_type", "bbolt")
 	v.SetDefault("bbolt_path", "./data/cache.db")
+	v.SetDefault("storage_ttl_seconds", int64((5*24*time.Hour)/time.Second))
+	v.SetDefault("storage_cleanup_interval_seconds", int64((12*time.Hour)/time.Second))
 
 	v.AutomaticEnv()
 
@@ -46,6 +54,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid crawl_interval (must be positive seconds)")
 	}
 	cfg.CrawlInterval = time.Duration(cfg.CrawlIntervalSeconds) * time.Second
+
+	if cfg.StorageTTLSeconds <= 0 {
+		return nil, fmt.Errorf("invalid storage_ttl_seconds (must be positive seconds)")
+	}
+	if cfg.StorageCleanupSeconds <= 0 {
+		return nil, fmt.Errorf("invalid storage_cleanup_interval_seconds (must be positive seconds)")
+	}
+	cfg.StorageTTL = time.Duration(cfg.StorageTTLSeconds) * time.Second
+	cfg.StorageCleanupInterval = time.Duration(cfg.StorageCleanupSeconds) * time.Second
 
 	return &cfg, nil
 }

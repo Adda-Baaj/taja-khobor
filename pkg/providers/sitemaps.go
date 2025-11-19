@@ -14,11 +14,13 @@ import (
 	"github.com/Adda-Baaj/taja-khobor/pkg/httpclient"
 )
 
+// hashURL generates a SHA-1 hash of the given URL string.
 func hashURL(u string) string {
 	sum := sha1.Sum([]byte(u))
 	return hex.EncodeToString(sum[:])
 }
 
+// responseSnippet returns a truncated snippet of the response body for logging.
 func responseSnippet(body []byte) string {
 	const maxLen = 512
 	s := strings.TrimSpace(string(body))
@@ -52,6 +54,7 @@ type googleNewsImage struct {
 	Title string `xml:"image:title"`
 }
 
+// parseGoogleNewsSitemap parses the XML data into a slice of googleNewsURL structs.
 func parseGoogleNewsSitemap(data []byte) ([]googleNewsURL, error) {
 	var sitemap googleNewsSitemap
 	if err := xml.Unmarshal(data, &sitemap); err != nil {
@@ -60,6 +63,7 @@ func parseGoogleNewsSitemap(data []byte) ([]googleNewsURL, error) {
 	return sitemap.URLs, nil
 }
 
+// buildArticlesFromSitemap constructs domain.Article instances from parsed Google News sitemap URLs.
 func buildArticlesFromSitemap(providerID string, urls []googleNewsURL) []domain.Article {
 	articles := make([]domain.Article, 0, len(urls))
 	for _, entry := range urls {
@@ -86,6 +90,7 @@ func buildArticlesFromSitemap(providerID string, urls []googleNewsURL) []domain.
 	return articles
 }
 
+// firstImageURL returns the first non-empty image URL from the list.
 func firstImageURL(images []googleNewsImage) string {
 	for _, img := range images {
 		if loc := strings.TrimSpace(img.Loc); loc != "" {
@@ -95,6 +100,7 @@ func firstImageURL(images []googleNewsImage) string {
 	return ""
 }
 
+// parseKeywords splits a comma-separated string of keywords into a slice of trimmed strings.
 func parseKeywords(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -115,6 +121,7 @@ func parseKeywords(raw string) []string {
 	return keywords
 }
 
+// parsePublicationDate attempts to parse the publication date from a string.
 func parsePublicationDate(raw string) time.Time {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -128,6 +135,7 @@ func parsePublicationDate(raw string) time.Time {
 	return time.Time{}
 }
 
+// fetchSitemap retrieves the sitemap XML data from the given URL using the provided HTTP client.
 func fetchSitemap(ctx context.Context, client httpclient.Client, url, providerID string, headers map[string]string) ([]byte, error) {
 	resp, err := client.Get(ctx, url, headers)
 	if err != nil {

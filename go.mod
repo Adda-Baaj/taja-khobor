@@ -10,6 +10,7 @@ require (
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/viper v1.21.0
+	go.etcd.io/bbolt v1.4.3
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v3 v3.0.1
 )

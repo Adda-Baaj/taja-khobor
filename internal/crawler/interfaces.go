@@ -15,5 +15,11 @@ type ArticleScraper interface {
 
 // EventPublisher publishes enriched articles downstream.
 type EventPublisher interface {
-	Publish(ctx context.Context, evt publishers.Event) error
+	Publish(ctx context.Context, evt publishers.Event) (int, error)
+}
+
+// ArticleDeduper tracks which articles have been published already.
+type ArticleDeduper interface {
+	SeenArticle(id string) (bool, error)
+	MarkArticle(id string) error
 }

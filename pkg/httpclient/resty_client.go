@@ -12,6 +12,7 @@ type RestyClient struct {
 	client *resty.Client
 }
 
+// NewRestyClient creates a new RestyClient with the specified timeout.
 func NewRestyClient(timeout time.Duration) *RestyClient {
 	return &RestyClient{client: newRestyBaseClient(timeout)}
 }
@@ -21,12 +22,14 @@ func NewRestyHTTPClient(timeout time.Duration) *resty.Client {
 	return newRestyBaseClient(timeout)
 }
 
+// newRestyBaseClient creates a new resty.Client with the specified timeout.
 func newRestyBaseClient(timeout time.Duration) *resty.Client {
 	c := resty.New()
 	c.SetTimeout(timeout)
 	return c
 }
 
+// Get performs an HTTP GET request with the specified context, URL, and headers.
 func (r *RestyClient) Get(ctx context.Context, url string, headers map[string]string) (Response, error) {
 	req := r.client.R().SetContext(ctx)
 	if len(headers) > 0 {
@@ -39,6 +42,7 @@ func (r *RestyClient) Get(ctx context.Context, url string, headers map[string]st
 	return &restyResponseAdapter{resp: resp}, nil
 }
 
+// restyResponseAdapter adapts resty.Response to the httpclient.Response interface.
 type restyResponseAdapter struct {
 	resp *resty.Response
 }

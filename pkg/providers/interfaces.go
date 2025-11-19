@@ -7,8 +7,8 @@ import (
 	"github.com/Adda-Baaj/taja-khobor/pkg/httpclient"
 )
 
-// Fetcher is responsible for retrieving and extracting articles for a provider.
-// Concrete implementations live in provider-specific files (e.g., ndtv.go).
+// Fetcher defines the interface for news provider fetchers.
+// Implementations should handle fetching articles from specific provider types.
 type Fetcher interface {
 	ID() string
 	Fetch(ctx context.Context, cfg Provider) ([]domain.Article, error)

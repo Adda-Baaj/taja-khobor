@@ -14,8 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Package providers contains pluggable provider configs (YAML/JSON) helpers.
-
+// Provider represents the configuration for a news provider.
 type Provider struct {
 	ID             string         `json:"id" yaml:"id"`
 	Name           string         `json:"name" yaml:"name"`
@@ -26,6 +25,7 @@ type Provider struct {
 	Config         map[string]any `json:"config" yaml:"config"`
 }
 
+// registryFile models the structure of the providers file.
 type registryFile struct {
 	Providers []Provider `json:"providers" yaml:"providers"`
 }
@@ -116,6 +116,7 @@ func (r *Registry) ByID(id string) (Provider, bool) {
 	return p, ok
 }
 
+// parseRegistry attempts to decode provider definitions from data.
 func parseRegistry(data []byte, ext string) (registryFile, error) {
 	ext = strings.ToLower(strings.TrimSpace(ext))
 
@@ -143,6 +144,7 @@ func parseRegistry(data []byte, ext string) (registryFile, error) {
 
 type unmarshalFn func([]byte, any) error
 
+// unmarshalRegistry decodes provider definitions using the given unmarshal function.
 func unmarshalRegistry(name string, data []byte, fn unmarshalFn) (registryFile, error) {
 	var reg registryFile
 	if err := fn(data, &reg); err != nil {
@@ -151,6 +153,7 @@ func unmarshalRegistry(name string, data []byte, fn unmarshalFn) (registryFile, 
 	return reg, nil
 }
 
+// sanitizeProvider cleans up and normalizes provider fields.
 func sanitizeProvider(p Provider) Provider {
 	p.ID = strings.TrimSpace(p.ID)
 	p.Name = strings.TrimSpace(p.Name)
@@ -168,6 +171,7 @@ func sanitizeProvider(p Provider) Provider {
 	return p
 }
 
+// validateProvider checks that required provider fields are present.
 func validateProvider(p Provider) error {
 	if p.ID == "" {
 		return errors.New("id is required")

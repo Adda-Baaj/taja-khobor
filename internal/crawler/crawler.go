@@ -15,22 +15,28 @@ import (
 
 const maxProviderWorkers = 10
 
+// Service orchestrates crawling of news providers, article enrichment, and publishing.
 type Service struct {
 	processor *ProviderProcessor
 	log       logger.Logger
 }
 
-func NewService(reg providers.FetcherRegistry, pub EventPublisher, log logger.Logger) *Service {
+// NewService builds a crawler service with the given fetcher registry and event publisher.
+func NewService(reg providers.FetcherRegistry, pub EventPublisher, log logger.Logger, deduper ArticleDeduper) *Service {
 	if log == nil {
 		log = logger.NopLogger{}
 	}
-	processor := NewProviderProcessor(reg, NewScraper(nil, log), pub, log)
+
+	scraper := NewScraper(nil, log)
+
+	processor := NewProviderProcessor(reg, scraper, pub, log, deduper)
 	return &Service{
 		processor: processor,
 		log:       log,
 	}
 }
 
+// Run starts the crawl loop until the context is cancelled.
 func (s *Service) Run(ctx context.Context, cfgs []providers.Provider) error {
 	if s == nil || s.processor == nil {
 		return fmt.Errorf("crawler service is not initialized")
@@ -48,6 +54,7 @@ func (s *Service) Run(ctx context.Context, cfgs []providers.Provider) error {
 	return nil
 }
 
+// runAll concurrently processes all providers using a pool of workers.
 func (s *Service) runAll(ctx context.Context, cfgs []providers.Provider) []error {
 	workerCount := min(len(cfgs), maxProviderWorkers)
 	if workerCount == 0 {
@@ -58,12 +65,12 @@ func (s *Service) runAll(ctx context.Context, cfgs []providers.Provider) []error
 	errCh := make(chan error, len(cfgs))
 
 	var wg sync.WaitGroup
-	for range workerCount {
+	for workerID := range workerCount {
 		wg.Add(1)
-		go func() {
+		go func(id int) {
 			defer wg.Done()
-			s.worker(ctx, cfgCh, errCh)
-		}()
+			s.worker(ctx, cfgCh, errCh, id)
+		}(workerID)
 	}
 
 	for _, cfg := range cfgs {
@@ -85,14 +92,16 @@ func (s *Service) runAll(ctx context.Context, cfgs []providers.Provider) []error
 	return errs
 }
 
-func (s *Service) worker(ctx context.Context, cfgCh <-chan providers.Provider, errCh chan<- error) {
+// worker processes providers from the channel and reports errors.
+func (s *Service) worker(ctx context.Context, cfgCh <-chan providers.Provider, errCh chan<- error, workerID int) {
 	for cfg := range cfgCh {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := s.processor.Process(ctx, cfg); err != nil {
+		if err := s.processor.Process(ctx, cfg, workerID); err != nil {
 			errCh <- err
 			s.log.ErrorObj("provider crawl failed", "provider_error", map[string]any{
+				"worker_id":   workerID,
 				"provider_id": cfg.ID,
 				"error":       err.Error(),
 			})
@@ -105,10 +114,12 @@ type ProviderProcessor struct {
 	registry  providers.FetcherRegistry
 	scraper   ArticleScraper
 	publisher EventPublisher
+	deduper   ArticleDeduper
 	log       logger.Logger
 }
 
-func NewProviderProcessor(reg providers.FetcherRegistry, scraper ArticleScraper, pub EventPublisher, log logger.Logger) *ProviderProcessor {
+// NewProviderProcessor builds a provider processor with the given fetcher registry, scraper, event publisher, logger, and article deduper.
+func NewProviderProcessor(reg providers.FetcherRegistry, scraper ArticleScraper, pub EventPublisher, log logger.Logger, deduper ArticleDeduper) *ProviderProcessor {
 	if log == nil {
 		log = logger.NopLogger{}
 	}
@@ -116,11 +127,13 @@ func NewProviderProcessor(reg providers.FetcherRegistry, scraper ArticleScraper,
 		registry:  reg,
 		scraper:   scraper,
 		publisher: pub,
+		deduper:   deduper,
 		log:       log,
 	}
 }
 
-func (p *ProviderProcessor) Process(ctx context.Context, cfg providers.Provider) error {
+// Process fetches, enriches, and publishes articles for the given provider configuration.
+func (p *ProviderProcessor) Process(ctx context.Context, cfg providers.Provider, workerID int) error {
 	if p == nil || p.registry == nil {
 		return fmt.Errorf("provider processor not initialized")
 	}
@@ -136,8 +149,25 @@ func (p *ProviderProcessor) Process(ctx context.Context, cfg providers.Provider)
 		return fmt.Errorf("fetch provider %s: %w", cfg.ID, err)
 	}
 
+	fetchedCount := len(articles)
+	if p.deduper != nil && fetchedCount > 0 {
+		articles = p.filterNewArticles(cfg, articles)
+	}
+
 	if p.scraper != nil {
 		articles = p.scraper.Enrich(ctx, cfg, articles)
+	}
+
+	if len(articles) == 0 {
+		p.log.InfoObj("provider crawl completed", "provider_result", map[string]any{
+			"worker_id":          workerID,
+			"provider_id":        cfg.ID,
+			"articles_fetched":   fetchedCount,
+			"articles_fresh":     0,
+			"articles_published": 0,
+			"elapsed_ms":         time.Since(start).Milliseconds(),
+		})
+		return nil
 	}
 
 	published := 0
@@ -148,14 +178,17 @@ func (p *ProviderProcessor) Process(ctx context.Context, cfg providers.Provider)
 	}
 
 	p.log.InfoObj("provider crawl completed", "provider_result", map[string]any{
+		"worker_id":          workerID,
 		"provider_id":        cfg.ID,
-		"articles_collected": len(articles),
+		"articles_fetched":   fetchedCount,
+		"articles_fresh":     len(articles),
 		"articles_published": published,
 		"elapsed_ms":         time.Since(start).Milliseconds(),
 	})
 	return nil
 }
 
+// publishArticles publishes the given articles for the provider and returns the count of successfully published articles and any errors.
 func (p *ProviderProcessor) publishArticles(ctx context.Context, cfg providers.Provider, articles []domain.Article) (int, error) {
 	if p.publisher == nil || len(articles) == 0 {
 		return 0, nil
@@ -165,17 +198,58 @@ func (p *ProviderProcessor) publishArticles(ctx context.Context, cfg providers.P
 	published := 0
 	for _, art := range articles {
 		evt := publishers.NewEvent(cfg.ID, cfg.Name, art)
-		if err := p.publisher.Publish(ctx, evt); err != nil {
+		successful, err := p.publisher.Publish(ctx, evt)
+		if err != nil {
 			errs = append(errs, fmt.Errorf("article %s: %w", art.ID, err))
 			p.log.ErrorObj("failed to publish article", "publisher_error", map[string]any{
 				"provider_id": cfg.ID,
 				"article_id":  art.ID,
 				"error":       err.Error(),
 			})
-			continue
 		}
-		published++
+		if successful > 0 {
+			published++
+			if p.deduper != nil {
+				if markErr := p.deduper.MarkArticle(art.ID); markErr != nil {
+					p.log.ErrorObj("failed to cache published article", "dedupe_error", map[string]any{
+						"provider_id": cfg.ID,
+						"article_id":  art.ID,
+						"error":       markErr.Error(),
+					})
+				}
+			}
+		}
 	}
 
 	return published, errors.Join(errs...)
+}
+
+// filterNewArticles filters out articles that have already been published according to the deduper.
+func (p *ProviderProcessor) filterNewArticles(cfg providers.Provider, articles []domain.Article) []domain.Article {
+	if p.deduper == nil || len(articles) == 0 {
+		return articles
+	}
+
+	fresh := make([]domain.Article, 0, len(articles))
+	for _, art := range articles {
+		seen, err := p.deduper.SeenArticle(art.ID)
+		if err != nil {
+			p.log.ErrorObj("dedupe lookup failed", "dedupe_error", map[string]any{
+				"provider_id": cfg.ID,
+				"article_id":  art.ID,
+				"error":       err.Error(),
+			})
+			fresh = append(fresh, art)
+			continue
+		}
+		if seen {
+			p.log.DebugObj("article skipped (already published)", "article_skip", map[string]any{
+				"provider_id": cfg.ID,
+				"article_id":  art.ID,
+			})
+			continue
+		}
+		fresh = append(fresh, art)
+	}
+	return fresh
 }

@@ -19,7 +19,8 @@ Taja Khobor is an open-source Go microservice that periodically collects news li
 - Metadata enrichment: fetched links are optionally enriched from OG/title/description/image tags with goquery; cancellation returns whatever was processed so far.
 - Shared HTTP client abstraction (resty under the hood) and centralized header builder.
 - Pluggable publishers: registry-driven fan-out to HTTP webhooks or AWS SQS queues with JSON payloads.
-- Structured logging with zap; storage layer remains stubbed for contributors to extend.
+- Optional dedupe cache: backed by a local storage file (default `bbolt` config) so previously published article IDs are skipped on future crawls.
+- Structured logging with zap; storage layer is pluggable for future backends.
 
 ## Quickstart
 Prereqs: Go 1.22+.
@@ -106,3 +107,6 @@ Currently supported publisher types:
 - `sqs`: Sends JSON payloads to AWS SQS with basic message attributes (requires valid AWS creds/resolved env).
 
 Disable a sink by setting `enabled: false`. Unknown/disabled types are ignored so future sinks can be pre-declared.
+
+## Storage / deduplication
+Set storage options via env (see `configs/.env`). By default the app uses a lightweight local file cache (`STORAGE_TYPE=bbolt`, `BBOLT_PATH=./data/cache.db`) to remember which article IDs have already been published. Switching `STORAGE_TYPE` to `none` disables dedupe entirely.

@@ -32,6 +32,7 @@ func (NopLogger) Sync() error                          { return nil }
 
 var global Logger
 
+// Init initializes the global logger based on the provided config.
 func Init(cfg *config.Config) (Logger, error) {
 	var level zapcore.Level
 	switch cfg.LogLevel {
@@ -63,26 +64,32 @@ func Init(cfg *config.Config) (Logger, error) {
 	return zLogger, nil
 }
 
+// InfoObj logs an informational message with an associated object.
 func (l *zapLogger) InfoObj(msg, key string, obj interface{}) {
 	l.s.Desugar().Info(msg, zap.Any(key, obj))
 }
 
+// DebugObj logs a debug message with an associated object.
 func (l *zapLogger) DebugObj(msg, key string, obj interface{}) {
 	l.s.Desugar().Debug(msg, zap.Any(key, obj))
 }
 
+// WarnObj logs a warning message with an associated object.
 func (l *zapLogger) WarnObj(msg, key string, obj interface{}) {
 	l.s.Desugar().Warn(msg, zap.Any(key, obj))
 }
 
+// ErrorObj logs an error message with an associated object.
 func (l *zapLogger) ErrorObj(msg, key string, obj interface{}) {
 	l.s.Desugar().Error(msg, zap.Any(key, obj))
 }
 
+// Sync flushes any buffered log entries.
 func (l *zapLogger) Sync() error {
 	return l.s.Sync()
 }
 
+// Close flushes and closes the global logger.
 func Close() error {
 	if global == nil {
 		return nil

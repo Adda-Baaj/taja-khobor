@@ -1,18 +1,19 @@
 package publishers
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 )
 
 // Builder creates a Publisher from a config entry.
-type Builder func(cfg PublisherConfig) (Publisher, error)
+type Builder func(ctx context.Context, cfg PublisherConfig, log Logger) (Publisher, error)
 
 // Registry maps publisher types to builders.
 type Registry interface {
 	Register(typ string, builder Builder)
-	PublisherFor(cfg PublisherConfig) (Publisher, error)
+	PublisherFor(ctx context.Context, cfg PublisherConfig, log Logger) (Publisher, error)
 }
 
 type registry struct {
@@ -43,7 +44,7 @@ func (r *registry) Register(typ string, builder Builder) {
 }
 
 // PublisherFor returns the publisher built for the provided config.
-func (r *registry) PublisherFor(cfg PublisherConfig) (Publisher, error) {
+func (r *registry) PublisherFor(ctx context.Context, cfg PublisherConfig, log Logger) (Publisher, error) {
 	if cfg.Type == "" {
 		return nil, fmt.Errorf("publisher %q has no type configured", cfg.ID)
 	}
@@ -55,7 +56,7 @@ func (r *registry) PublisherFor(cfg PublisherConfig) (Publisher, error) {
 	if builder == nil {
 		return nil, fmt.Errorf("no publisher registered for type %q", cfg.Type)
 	}
-	return builder(cfg)
+	return builder(ctx, cfg, log)
 }
 
 // DefaultRegistry wires up known publishers.
@@ -68,14 +69,19 @@ func DefaultRegistry() Registry {
 }
 
 // BuildAll instantiates publishers for configs using the registry.
-func BuildAll(reg Registry, cfgs []PublisherConfig) ([]Publisher, error) {
+func BuildAll(ctx context.Context, reg Registry, cfgs []PublisherConfig, log Logger) ([]Publisher, error) {
 	if reg == nil || len(cfgs) == 0 {
 		return nil, nil
 	}
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	log = ensureLogger(log)
+
 	var pubs []Publisher
 	for _, cfg := range cfgs {
-		pub, err := reg.PublisherFor(cfg)
+		pub, err := reg.PublisherFor(ctx, cfg, log)
 		if err != nil {
 			return nil, err
 		}

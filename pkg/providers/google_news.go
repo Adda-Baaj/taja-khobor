@@ -13,6 +13,7 @@ type googleNewsFetcher struct {
 	client HTTPClient
 }
 
+// NewGoogleNewsFetcher builds a Fetcher for Google News sitemap providers.
 func NewGoogleNewsFetcher(client HTTPClient) Fetcher {
 	if client == nil {
 		client = DefaultHTTPClient()
@@ -20,10 +21,12 @@ func NewGoogleNewsFetcher(client HTTPClient) Fetcher {
 	return &googleNewsFetcher{client: client}
 }
 
+// ID returns the provider type for the Google News fetcher.
 func (f *googleNewsFetcher) ID() string {
 	return ProviderTypeGoogleNews
 }
 
+// Fetch retrieves articles from a Google News sitemap provider.
 func (f *googleNewsFetcher) Fetch(ctx context.Context, cfg Provider) ([]domain.Article, error) {
 	if !strings.EqualFold(cfg.Type, ProviderTypeGoogleNews) {
 		return nil, fmt.Errorf("google news fetcher received incompatible provider type %q", cfg.Type)

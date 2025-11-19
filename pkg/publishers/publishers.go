@@ -22,8 +22,7 @@ const (
 	httpDefaultTimeoutSeconds = 5
 )
 
-// Config registry helpers for publisher sinks.
-
+// configFile represents the structure of the publishers configuration file.
 type configFile struct {
 	Publishers []PublisherConfig `json:"publishers" yaml:"publishers"`
 }
@@ -104,6 +103,7 @@ func LoadRegistry(path string) (*ConfigRegistry, error) {
 	return reg, nil
 }
 
+// parsePublisherRegistry attempts to decode the publishers file content.
 func parsePublisherRegistry(data []byte, ext string) (configFile, error) {
 	ext = strings.ToLower(strings.TrimSpace(ext))
 	decoders := []struct {
@@ -128,6 +128,7 @@ func parsePublisherRegistry(data []byte, ext string) (configFile, error) {
 	return configFile{}, errors.New("publishers file format not recognized (expected YAML or JSON)")
 }
 
+// unmarshalPublisherRegistry decodes the publishers file using the provided function.
 func unmarshalPublisherRegistry(name string, data []byte, fn func([]byte, any) error) (configFile, error) {
 	var reg configFile
 	if err := fn(data, &reg); err != nil {
@@ -136,6 +137,7 @@ func unmarshalPublisherRegistry(name string, data []byte, fn func([]byte, any) e
 	return reg, nil
 }
 
+// sanitizePublisherConfig trims and normalizes the publisher config fields.
 func sanitizePublisherConfig(cfg PublisherConfig) PublisherConfig {
 	cfg.ID = strings.TrimSpace(cfg.ID)
 	cfg.Type = strings.ToLower(strings.TrimSpace(cfg.Type))
@@ -167,6 +169,7 @@ func sanitizePublisherConfig(cfg PublisherConfig) PublisherConfig {
 	return cfg
 }
 
+// sanitizeHeaders trims and removes empty headers.
 func sanitizeHeaders(headers map[string]string) map[string]string {
 	if len(headers) == 0 {
 		return nil
@@ -186,6 +189,7 @@ func sanitizeHeaders(headers map[string]string) map[string]string {
 	return out
 }
 
+// validatePublisherConfig checks that required fields are present.
 func validatePublisherConfig(cfg PublisherConfig) error {
 	if cfg.ID == "" {
 		return errors.New("id is required")

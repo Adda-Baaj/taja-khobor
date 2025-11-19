@@ -36,7 +36,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	collector, err := app.NewCollector(cfg, log)
+	collector, err := app.NewCollector(ctx, cfg, log)
 	if err != nil {
 		logger.ErrorObj("failed to initialize collector", "error", err)
 		return err

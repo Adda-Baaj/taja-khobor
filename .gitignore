@@ -56,3 +56,5 @@ Thumbs.db
 __debug_bin*
 
 .gocache/
+
+cache.db
