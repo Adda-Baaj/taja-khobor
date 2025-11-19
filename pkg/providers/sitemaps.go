@@ -60,7 +60,7 @@ func parseGoogleNewsSitemap(data []byte) ([]googleNewsURL, error) {
 	return sitemap.URLs, nil
 }
 
-func buildArticlesFromSitemap(urls []googleNewsURL) []domain.Article {
+func buildArticlesFromSitemap(providerID string, urls []googleNewsURL) []domain.Article {
 	articles := make([]domain.Article, 0, len(urls))
 	for _, entry := range urls {
 		loc := strings.TrimSpace(entry.Loc)
@@ -74,6 +74,7 @@ func buildArticlesFromSitemap(urls []googleNewsURL) []domain.Article {
 		imageURL := firstImageURL(entry.Images)
 
 		articles = append(articles, domain.Article{
+			ProviderID:  providerID,
 			ID:          hashURL(loc),
 			Title:       title,
 			URL:         loc,

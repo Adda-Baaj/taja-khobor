@@ -6,6 +6,16 @@ publishers:
       uri: "https://sqs.ap-south-1.amazonaws.com/1234567890/link-events"
       region: "ap-south-1"
 
+  - id: webhook
+    type: http
+    enabled: true
+    http:
+      url: "https://example.com/hooks/link-events"
+      method: POST
+      timeout_seconds: 5
+      headers:
+        X-Auth-Token: "secret-token"
+
   - id: kafka-events
     type: kafka
     enabled: false

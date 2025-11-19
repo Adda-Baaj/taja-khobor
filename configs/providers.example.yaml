@@ -1,9 +1,9 @@
 providers:
   - id: example
     name: Example Provider
-    type: https
-    source_url: https://example.com/api
-    response_format: json
+    type: google_news_sitemap
+    source_url: https://example.com/news-sitemap.xml
+    response_format: xml
     request_delay_ms: 500
     config:
       user_agent: MyCrawler/1.0 (+https://example.com)

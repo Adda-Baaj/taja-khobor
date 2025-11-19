@@ -7,10 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Adda-Baaj/taja-khobor/internal/app"
 	"github.com/Adda-Baaj/taja-khobor/internal/config"
-	"github.com/Adda-Baaj/taja-khobor/internal/crawler"
 	"github.com/Adda-Baaj/taja-khobor/internal/logger"
-	"github.com/Adda-Baaj/taja-khobor/pkg/providers"
 )
 
 func main() {
@@ -26,7 +25,7 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	_, err = logger.Init(cfg)
+	log, err := logger.Init(cfg)
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
 	}
@@ -34,31 +33,18 @@ func run() error {
 
 	logger.InfoObj("collector starting", "config", cfg)
 
-	if err := providers.LoadProviders(cfg.ProvidersFile); err != nil {
-		logger.ErrorObj("failed to load providers registry", "error", err)
-		return fmt.Errorf("load providers registry: %w", err)
-	}
-	resolvedProviders := providers.Providers()
-	logger.InfoObj("providers registry loaded", "providers", resolvedProviders)
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if len(resolvedProviders) == 0 {
-		logger.WarnObj("no providers configured; collector exiting", "providers_file", cfg.ProvidersFile)
-		return nil
+	collector, err := app.NewCollector(cfg, log)
+	if err != nil {
+		logger.ErrorObj("failed to initialize collector", "error", err)
+		return err
 	}
 
-	crawlService := crawler.NewService(providers.DefaultFetcherRegistry(nil))
-	if err := crawlService.Run(ctx, resolvedProviders); err != nil {
-		logger.ErrorObj("crawl completed with errors", "error", err)
-		return fmt.Errorf("crawl execution: %w", err)
+	if err := collector.Run(ctx); err != nil {
+		return fmt.Errorf("collector run: %w", err)
 	}
-
-	logger.InfoObj("collector waiting for shutdown signal", "providers_count", len(resolvedProviders))
-	<-ctx.Done()
-
-	logger.InfoObj("collector shutting down gracefully", "reason", ctx.Err())
 
 	return nil
 }

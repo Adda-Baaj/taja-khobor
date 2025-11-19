@@ -13,9 +13,18 @@ type RestyClient struct {
 }
 
 func NewRestyClient(timeout time.Duration) *RestyClient {
+	return &RestyClient{client: newRestyBaseClient(timeout)}
+}
+
+// NewRestyHTTPClient exposes a configured resty.Client for callers needing custom verbs.
+func NewRestyHTTPClient(timeout time.Duration) *resty.Client {
+	return newRestyBaseClient(timeout)
+}
+
+func newRestyBaseClient(timeout time.Duration) *resty.Client {
 	c := resty.New()
 	c.SetTimeout(timeout)
-	return &RestyClient{client: c}
+	return c
 }
 
 func (r *RestyClient) Get(ctx context.Context, url string, headers map[string]string) (Response, error) {

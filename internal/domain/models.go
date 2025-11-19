@@ -5,6 +5,7 @@ import "time"
 // Domain contains core models and interfaces.
 
 type Article struct {
+	ProviderID  string
 	ID          string
 	Title       string
 	URL         string

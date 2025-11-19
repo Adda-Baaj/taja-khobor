@@ -7,26 +7,32 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Adda-Baaj/taja-khobor/internal/domain"
 	"github.com/Adda-Baaj/taja-khobor/internal/logger"
 	"github.com/Adda-Baaj/taja-khobor/pkg/providers"
+	"github.com/Adda-Baaj/taja-khobor/pkg/publishers"
 )
 
 const maxProviderWorkers = 10
 
 type Service struct {
-	registry providers.FetcherRegistry
-	scraper  ArticleScraper
+	processor *ProviderProcessor
+	log       logger.Logger
 }
 
-func NewService(reg providers.FetcherRegistry) *Service {
+func NewService(reg providers.FetcherRegistry, pub EventPublisher, log logger.Logger) *Service {
+	if log == nil {
+		log = logger.NopLogger{}
+	}
+	processor := NewProviderProcessor(reg, NewScraper(nil, log), pub, log)
 	return &Service{
-		registry: reg,
-		scraper:  NewScraper(nil),
+		processor: processor,
+		log:       log,
 	}
 }
 
 func (s *Service) Run(ctx context.Context, cfgs []providers.Provider) error {
-	if s == nil || s.registry == nil {
+	if s == nil || s.processor == nil {
 		return fmt.Errorf("crawler service is not initialized")
 	}
 
@@ -84,9 +90,9 @@ func (s *Service) worker(ctx context.Context, cfgCh <-chan providers.Provider, e
 		if ctx.Err() != nil {
 			return
 		}
-		if err := s.runProvider(ctx, cfg); err != nil {
+		if err := s.processor.Process(ctx, cfg); err != nil {
 			errCh <- err
-			logger.ErrorObj("provider crawl failed", "provider_error", map[string]any{
+			s.log.ErrorObj("provider crawl failed", "provider_error", map[string]any{
 				"provider_id": cfg.ID,
 				"error":       err.Error(),
 			})
@@ -94,9 +100,33 @@ func (s *Service) worker(ctx context.Context, cfgCh <-chan providers.Provider, e
 	}
 }
 
-func (s *Service) runProvider(ctx context.Context, cfg providers.Provider) error {
+// ProviderProcessor fetches, enriches, and publishes provider articles.
+type ProviderProcessor struct {
+	registry  providers.FetcherRegistry
+	scraper   ArticleScraper
+	publisher EventPublisher
+	log       logger.Logger
+}
+
+func NewProviderProcessor(reg providers.FetcherRegistry, scraper ArticleScraper, pub EventPublisher, log logger.Logger) *ProviderProcessor {
+	if log == nil {
+		log = logger.NopLogger{}
+	}
+	return &ProviderProcessor{
+		registry:  reg,
+		scraper:   scraper,
+		publisher: pub,
+		log:       log,
+	}
+}
+
+func (p *ProviderProcessor) Process(ctx context.Context, cfg providers.Provider) error {
+	if p == nil || p.registry == nil {
+		return fmt.Errorf("provider processor not initialized")
+	}
+
 	start := time.Now()
-	fetcher, err := s.registry.FetcherFor(cfg)
+	fetcher, err := p.registry.FetcherFor(cfg)
 	if err != nil {
 		return fmt.Errorf("resolve fetcher for provider %s: %w", cfg.ID, err)
 	}
@@ -106,14 +136,46 @@ func (s *Service) runProvider(ctx context.Context, cfg providers.Provider) error
 		return fmt.Errorf("fetch provider %s: %w", cfg.ID, err)
 	}
 
-	if s.scraper != nil {
-		articles = s.scraper.Enrich(ctx, cfg, articles)
+	if p.scraper != nil {
+		articles = p.scraper.Enrich(ctx, cfg, articles)
 	}
 
-	logger.InfoObj("provider crawl completed", "provider_result", map[string]any{
+	published := 0
+	if count, err := p.publishArticles(ctx, cfg, articles); err != nil {
+		return fmt.Errorf("publish provider %s articles: %w", cfg.ID, err)
+	} else {
+		published = count
+	}
+
+	p.log.InfoObj("provider crawl completed", "provider_result", map[string]any{
 		"provider_id":        cfg.ID,
 		"articles_collected": len(articles),
+		"articles_published": published,
 		"elapsed_ms":         time.Since(start).Milliseconds(),
 	})
 	return nil
+}
+
+func (p *ProviderProcessor) publishArticles(ctx context.Context, cfg providers.Provider, articles []domain.Article) (int, error) {
+	if p.publisher == nil || len(articles) == 0 {
+		return 0, nil
+	}
+
+	var errs []error
+	published := 0
+	for _, art := range articles {
+		evt := publishers.NewEvent(cfg.ID, cfg.Name, art)
+		if err := p.publisher.Publish(ctx, evt); err != nil {
+			errs = append(errs, fmt.Errorf("article %s: %w", art.ID, err))
+			p.log.ErrorObj("failed to publish article", "publisher_error", map[string]any{
+				"provider_id": cfg.ID,
+				"article_id":  art.ID,
+				"error":       err.Error(),
+			})
+			continue
+		}
+		published++
+	}
+
+	return published, errors.Join(errs...)
 }

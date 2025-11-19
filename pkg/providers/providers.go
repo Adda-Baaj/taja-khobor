@@ -26,97 +26,97 @@ type Provider struct {
 	Config         map[string]any `json:"config" yaml:"config"`
 }
 
-type registry struct {
+type registryFile struct {
 	Providers []Provider `json:"providers" yaml:"providers"`
 }
 
-var (
-	regMu                 sync.RWMutex
-	currentReg            registry
-	providersIdx          map[string]Provider
-	defaultRequestDelayMs = 500
-)
+const defaultRequestDelayMs = 500
 
-// Providers returns a copy of the currently loaded providers registry.
-func Providers() []Provider {
-	regMu.RLock()
-	defer regMu.RUnlock()
-
-	if len(currentReg.Providers) == 0 {
-		return nil
-	}
-
-	out := make([]Provider, len(currentReg.Providers))
-	copy(out, currentReg.Providers)
-	return out
+// Registry is an in-memory snapshot of provider configs sourced from files.
+type Registry struct {
+	mu        sync.RWMutex
+	providers []Provider
+	idx       map[string]Provider
 }
 
-// ProviderByID returns the provider entry for the given id, if loaded.
-func ProviderByID(id string) (Provider, bool) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return Provider{}, false
-	}
-
-	regMu.RLock()
-	defer regMu.RUnlock()
-
-	if providersIdx == nil {
-		return Provider{}, false
-	}
-
-	p, ok := providersIdx[id]
-	return p, ok
-}
-
-// LoadProviders loads provider registry from file.
-func LoadProviders(path string) error {
+// LoadRegistry reads provider definitions from a YAML/JSON file.
+func LoadRegistry(path string) (*Registry, error) {
 	if strings.TrimSpace(path) == "" {
-		return errors.New("providers file path is empty")
+		return nil, errors.New("providers file path is empty")
 	}
 
 	file, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("open providers file: %w", err)
+		return nil, fmt.Errorf("open providers file: %w", err)
 	}
 	defer file.Close()
 
 	raw, err := io.ReadAll(file)
 	if err != nil {
-		return fmt.Errorf("read providers file: %w", err)
+		return nil, fmt.Errorf("read providers file: %w", err)
 	}
 
-	reg, err := parseRegistry(raw, filepath.Ext(path))
+	fileReg, err := parseRegistry(raw, filepath.Ext(path))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if len(reg.Providers) == 0 {
-		return errors.New("providers file contains no providers entries")
+	if len(fileReg.Providers) == 0 {
+		return nil, errors.New("providers file contains no providers entries")
 	}
 
-	idx := make(map[string]Provider, len(reg.Providers))
-	for i := range reg.Providers {
-		p := sanitizeProvider(reg.Providers[i])
+	reg := &Registry{
+		providers: make([]Provider, len(fileReg.Providers)),
+		idx:       make(map[string]Provider, len(fileReg.Providers)),
+	}
+
+	for i := range fileReg.Providers {
+		p := sanitizeProvider(fileReg.Providers[i])
 		if err := validateProvider(p); err != nil {
-			return fmt.Errorf("provider[%d]: %w", i, err)
+			return nil, fmt.Errorf("provider[%d]: %w", i, err)
 		}
-		if _, exists := idx[p.ID]; exists {
-			return fmt.Errorf("duplicate provider id %q", p.ID)
+		if _, exists := reg.idx[p.ID]; exists {
+			return nil, fmt.Errorf("duplicate provider id %q", p.ID)
 		}
-		reg.Providers[i] = p
-		idx[p.ID] = p
+		reg.providers[i] = p
+		reg.idx[p.ID] = p
 	}
 
-	regMu.Lock()
-	currentReg = reg
-	providersIdx = idx
-	regMu.Unlock()
-
-	return nil
+	return reg, nil
 }
 
-func parseRegistry(data []byte, ext string) (registry, error) {
+// All returns a copy of every provider definition.
+func (r *Registry) All() []Provider {
+	if r == nil {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	out := make([]Provider, len(r.providers))
+	copy(out, r.providers)
+	return out
+}
+
+// ByID finds a provider by id.
+func (r *Registry) ByID(id string) (Provider, bool) {
+	if r == nil {
+		return Provider{}, false
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Provider{}, false
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.idx[id]
+	return p, ok
+}
+
+func parseRegistry(data []byte, ext string) (registryFile, error) {
 	ext = strings.ToLower(strings.TrimSpace(ext))
 
 	decoders := []struct {
@@ -138,15 +138,15 @@ func parseRegistry(data []byte, ext string) (registry, error) {
 		}
 	}
 
-	return registry{}, errors.New("providers file format not recognized (expected YAML or JSON)")
+	return registryFile{}, errors.New("providers file format not recognized (expected YAML or JSON)")
 }
 
 type unmarshalFn func([]byte, any) error
 
-func unmarshalRegistry(name string, data []byte, fn unmarshalFn) (registry, error) {
-	var reg registry
+func unmarshalRegistry(name string, data []byte, fn unmarshalFn) (registryFile, error) {
+	var reg registryFile
 	if err := fn(data, &reg); err != nil {
-		return registry{}, fmt.Errorf("decode %s providers: %w", name, err)
+		return registryFile{}, fmt.Errorf("decode %s providers: %w", name, err)
 	}
 	return reg, nil
 }
@@ -154,7 +154,7 @@ func unmarshalRegistry(name string, data []byte, fn unmarshalFn) (registry, erro
 func sanitizeProvider(p Provider) Provider {
 	p.ID = strings.TrimSpace(p.ID)
 	p.Name = strings.TrimSpace(p.Name)
-	p.Type = strings.TrimSpace(p.Type)
+	p.Type = strings.ToLower(strings.TrimSpace(p.Type))
 	p.SourceURL = strings.TrimSpace(p.SourceURL)
 	p.ResponseFormat = strings.TrimSpace(p.ResponseFormat)
 

@@ -24,13 +24,17 @@ const (
 
 type Scraper struct {
 	client httpclient.Client
+	log    logger.Logger
 }
 
-func NewScraper(client httpclient.Client) *Scraper {
+func NewScraper(client httpclient.Client, log logger.Logger) *Scraper {
 	if client == nil {
 		client = providers.DefaultHTTPClient()
 	}
-	return &Scraper{client: client}
+	if log == nil {
+		log = logger.NopLogger{}
+	}
+	return &Scraper{client: client, log: log}
 }
 
 func (s *Scraper) Enrich(ctx context.Context, cfg providers.Provider, articles []domain.Article) []domain.Article {
@@ -99,7 +103,7 @@ func (s *Scraper) articleWorker(
 
 		art := articles[idx]
 		if enriched, err := s.fetchAndParse(ctx, cfg, art); err != nil {
-			logger.WarnObj("article metadata scrape failed", "metadata_error", map[string]any{
+			s.log.WarnObj("article metadata scrape failed", "metadata_error", map[string]any{
 				"provider_id": cfg.ID,
 				"url":         art.URL,
 				"error":       err.Error(),
@@ -114,7 +118,7 @@ func (s *Scraper) articleWorker(
 func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art domain.Article) (domain.Article, error) {
 	headers := providers.Headers(cfg)
 
-	logger.InfoObj("scraping article metadata", "scrape_start", map[string]any{
+	s.log.InfoObj("scraping article metadata", "scrape_start", map[string]any{
 		"provider_id": cfg.ID,
 		"url":         art.URL,
 	})
@@ -134,7 +138,7 @@ func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art
 
 	body := resp.Body()
 	if len(body) > maxHTMLBodyBytes {
-		logger.InfoObj("html body truncated", "truncation", map[string]any{
+		s.log.InfoObj("html body truncated", "truncation", map[string]any{
 			"provider_id": cfg.ID,
 			"url":         art.URL,
 			"original":    len(body),

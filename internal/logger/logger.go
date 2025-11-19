@@ -8,9 +8,31 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var S *zap.SugaredLogger
+// Logger describes the logging surface used across the service.
+type Logger interface {
+	InfoObj(msg, key string, obj interface{})
+	DebugObj(msg, key string, obj interface{})
+	WarnObj(msg, key string, obj interface{})
+	ErrorObj(msg, key string, obj interface{})
+	Sync() error
+}
 
-func Init(cfg *config.Config) (*zap.SugaredLogger, error) {
+type zapLogger struct {
+	s *zap.SugaredLogger
+}
+
+// NopLogger discards all log messages.
+type NopLogger struct{}
+
+func (NopLogger) InfoObj(string, string, interface{})  {}
+func (NopLogger) DebugObj(string, string, interface{}) {}
+func (NopLogger) WarnObj(string, string, interface{})  {}
+func (NopLogger) ErrorObj(string, string, interface{}) {}
+func (NopLogger) Sync() error                          { return nil }
+
+var global Logger
+
+func Init(cfg *config.Config) (Logger, error) {
 	var level zapcore.Level
 	switch cfg.LogLevel {
 	case "debug":
@@ -36,42 +58,62 @@ func Init(cfg *config.Config) (*zap.SugaredLogger, error) {
 	)
 
 	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
-	sugar := logger.Sugar()
-	S = sugar
-	return sugar, nil
+	zLogger := &zapLogger{s: logger.Sugar()}
+	global = zLogger
+	return zLogger, nil
+}
+
+func (l *zapLogger) InfoObj(msg, key string, obj interface{}) {
+	l.s.Desugar().Info(msg, zap.Any(key, obj))
+}
+
+func (l *zapLogger) DebugObj(msg, key string, obj interface{}) {
+	l.s.Desugar().Debug(msg, zap.Any(key, obj))
+}
+
+func (l *zapLogger) WarnObj(msg, key string, obj interface{}) {
+	l.s.Desugar().Warn(msg, zap.Any(key, obj))
+}
+
+func (l *zapLogger) ErrorObj(msg, key string, obj interface{}) {
+	l.s.Desugar().Error(msg, zap.Any(key, obj))
+}
+
+func (l *zapLogger) Sync() error {
+	return l.s.Sync()
 }
 
 func Close() error {
-	if S == nil {
+	if global == nil {
 		return nil
 	}
-	return S.Sync()
+	return global.Sync()
 }
 
 func InfoObj(msg, key string, obj interface{}) {
-	if S == nil {
+	if global == nil {
 		return
 	}
-	S.Desugar().Info(msg, zap.Any(key, obj))
+	global.InfoObj(msg, key, obj)
 }
 
 func DebugObj(msg, key string, obj interface{}) {
-	if S == nil {
+	if global == nil {
 		return
 	}
-	S.Desugar().Debug(msg, zap.Any(key, obj))
+	global.DebugObj(msg, key, obj)
 }
 
 func WarnObj(msg, key string, obj interface{}) {
-	if S == nil {
+	if global == nil {
 		return
 	}
-	S.Desugar().Warn(msg, zap.Any(key, obj))
+	global.WarnObj(msg, key, obj)
 }
 
 func ErrorObj(msg, key string, obj interface{}) {
-	if S == nil {
+	if global == nil {
 		return
 	}
-	S.Desugar().Error(msg, zap.Any(key, obj))
+	global.ErrorObj(msg, key, obj)
 }
