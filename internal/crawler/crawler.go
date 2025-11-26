@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Adda-Baaj/taja-khobor/internal/domain"
-	"github.com/Adda-Baaj/taja-khobor/internal/logger"
-	"github.com/Adda-Baaj/taja-khobor/pkg/providers"
-	"github.com/Adda-Baaj/taja-khobor/pkg/publishers"
+	"github.com/samvad-hq/samvad-news-harvester/internal/domain"
+	"github.com/samvad-hq/samvad-news-harvester/internal/logger"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/providers"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/publishers"
 )
 
 const maxProviderWorkers = 10

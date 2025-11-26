@@ -3,7 +3,7 @@ package publishers
 import (
 	"time"
 
-	"github.com/Adda-Baaj/taja-khobor/internal/domain"
+	"github.com/samvad-hq/samvad-news-harvester/internal/domain"
 )
 
 // Event represents the payload published downstream.

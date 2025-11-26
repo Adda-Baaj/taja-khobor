@@ -32,7 +32,7 @@ func Load() (*Config, error) {
 
 	v := viper.New()
 
-	v.SetDefault("app_name", "taja-khobor")
+	v.SetDefault("app_name", "samvad-news-harvester")
 	v.SetDefault("app_env", "development")
 	v.SetDefault("log_level", "info")
 	v.SetDefault("providers_file", "./configs/providers.yaml")

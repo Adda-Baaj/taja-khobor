@@ -1,4 +1,4 @@
-module github.com/Adda-Baaj/taja-khobor
+module github.com/samvad-hq/samvad-news-harvester
 
 go 1.24.6
 

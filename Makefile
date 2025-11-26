@@ -4,7 +4,7 @@ build:
 	go build ./...
 
 run:
-	go run ./cmd/collector
+	go run ./cmd/harvester
 
 test:
 	go test ./...

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Adda-Baaj/taja-khobor/internal/domain"
-	"github.com/Adda-Baaj/taja-khobor/pkg/httpclient"
+	"github.com/samvad-hq/samvad-news-harvester/internal/domain"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/httpclient"
 )
 
 // hashURL generates a SHA-1 hash of the given URL string.

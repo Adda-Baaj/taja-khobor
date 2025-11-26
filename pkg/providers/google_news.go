@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Adda-Baaj/taja-khobor/internal/domain"
+	"github.com/samvad-hq/samvad-news-harvester/internal/domain"
 )
 
 // googleNewsFetcher implements Fetcher for Google News sitemap providers.

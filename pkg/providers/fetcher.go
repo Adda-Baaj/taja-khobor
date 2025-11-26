@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Adda-Baaj/taja-khobor/pkg/httpclient"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/httpclient"
 )
 
 // fetcherRegistry implements FetcherRegistry.
