@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Adda-Baaj/taja-khobor/pkg/httpclient"
 	"github.com/go-resty/resty/v2"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/httpclient"
 )
 
 // httpPublisher implements the Publisher interface for HTTP endpoints.

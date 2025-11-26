@@ -3,7 +3,7 @@ package logger
 import (
 	"os"
 
-	"github.com/Adda-Baaj/taja-khobor/internal/config"
+	"github.com/samvad-hq/samvad-news-harvester/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

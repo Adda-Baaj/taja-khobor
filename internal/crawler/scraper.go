@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Adda-Baaj/taja-khobor/internal/domain"
-	"github.com/Adda-Baaj/taja-khobor/internal/logger"
-	"github.com/Adda-Baaj/taja-khobor/pkg/httpclient"
-	"github.com/Adda-Baaj/taja-khobor/pkg/providers"
+	"github.com/samvad-hq/samvad-news-harvester/internal/domain"
+	"github.com/samvad-hq/samvad-news-harvester/internal/logger"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/httpclient"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/providers"
 
 	"github.com/PuerkitoBio/goquery"
 )

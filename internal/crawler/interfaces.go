@@ -3,9 +3,9 @@ package crawler
 import (
 	"context"
 
-	"github.com/Adda-Baaj/taja-khobor/internal/domain"
-	"github.com/Adda-Baaj/taja-khobor/pkg/providers"
-	"github.com/Adda-Baaj/taja-khobor/pkg/publishers"
+	"github.com/samvad-hq/samvad-news-harvester/internal/domain"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/providers"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/publishers"
 )
 
 // ArticleScraper enriches crawled articles with metadata (e.g., OG tags).

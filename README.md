@@ -1,28 +1,84 @@
-# taja-khobor
+# `samvad-news-harvester`
 
-Taja Khobor is a tiny Go service that crawls news sources, enriches links with lightweight metadata, and fans events out to queues or webhooks. It is intentionally small, pluggable, and friendly to new contributors.
+**Samvad News Harvester** is a tiny Go service that fetches news links from provider feeds, enriches them with lightweight metadata, and fans structured events out to queues or webhooks.
+It is intentionally small, pluggable, and welcoming to new contributors.
+The harvester only uses public sitemaps, or link lists, and never fetches or stores full article bodies.
+
+---
 
 ## What it does
-- Crawls providers registered in YAML/JSON; today ships with Google News sitemap fetcher. Tested with dozens of Indian news sources.
-- Enriches links with titles/descriptions/images via goquery (best effort, returns partial results on cancel).
-- Fans out JSON events to multiple publishers (HTTP webhooks or queues: AWS SQS/SNS, GCP Pub/Sub) via a registry.
-- Optional dedupe layer (BoltDB file by default) so previously published article IDs are skipped.
+
+* Fetches links from providers defined in YAML/JSON config.
+  Ships with a Google News sitemap fetcher tested across dozens of Indian news sources. *(ndtv, thehindu, timesofindia, financialexpress, etc.)*
+* Enriches links with titles/descriptions/images using `goquery` (best effort; returns partial results on timeout or cancel).
+* Publishes JSON events to multiple sinks (HTTP webhooks or queues: AWS SQS/SNS, GCP Pub/Sub) via a pluggable registry.
+* Provides an optional dedupe layer (`bbolt` file by default) to skip previously published article IDs.
+
+### Quick architecture sketch
+
+```mermaid
+sequenceDiagram
+    Scheduler->>Provider: Fetch feed (sitemap/RSS)
+    Provider-->>Scheduler: Links
+
+    loop each link
+        Scheduler->>Preview: Get metadata (OG/title)
+        Preview-->>Scheduler: Metadata
+
+        Scheduler->>Dedupe: Seen?
+        Dedupe-->>Scheduler: yes/no
+
+        alt new
+            Scheduler->>Publisher: Publish event
+            Publisher->>Sink: Deliver
+            Scheduler->>Dedupe: Mark seen
+        else skip
+        end
+    end
+
+```
+
+---
 
 ## Prereqs
-- Go 1.24+
-- Access to any sinks you enable (webhook URL, SQS/SNS creds, Pub/Sub topic, etc.).
+
+* Go 1.24+
+* Access to whichever sinks you enable (webhook URL, SQS/SNS credentials, Pub/Sub topic, etc.)
+
+---
 
 ## Quickstart (local)
-1) Providers: edit `configs/providers.yaml` (or point `PROVIDERS_FILE` to your own). Set a real `user_agent`; headers are not defaulted.  
-2) Publishers: copy `configs/publishers.example.yaml` to `configs/publishers.yaml`, then **disable sinks you don’t own** (`enabled: false`) or set the required env vars for the ones you keep. The default example enables GCP Pub/Sub, so toggle it off if you don’t have creds handy.  
-3) Run the collector:
-```bash
-go run ./cmd/collector
-```
-The process stays alive and triggers a crawl every `CRAWL_INTERVAL` (default 15m).
+
+1. **Providers**
+   Edit `configs/providers.yaml` (or point `PROVIDERS_FILE` to your own).
+   Always set a valid `user_agent`; headers are not defaulted.
+
+2. **Publishers**
+   Copy:
+
+   ```bash
+   cp configs/publishers.example.yaml configs/publishers.yaml
+   ```
+
+   Then disable sinks you don’t own (`enabled: false`) or set the env vars for the ones you keep.
+   The example enables GCP Pub/Sub — toggle it off if you don't have creds.
+
+3. **Run the harvester**
+
+   ```bash
+   go run ./cmd/harvester
+   ```
+
+   The process stays alive and runs every `CRAWL_INTERVAL` (default: 15m).
+
+---
 
 ## Providers
-Providers live in `configs/providers.yaml` (YAML or JSON). Google News example:
+
+Providers live in `configs/providers.yaml` (YAML or JSON).
+
+**Google News example:**
+
 ```yaml
 providers:
   - id: ndtv
@@ -32,21 +88,38 @@ providers:
     response_format: xml
     request_delay_ms: 500
     config:
-      user_agent: <required>   # always set this; headers are never defaulted
+      user_agent: <required>   # must be set; headers are never defaulted
       accept: <optional>
       accept_language: <optional>
       cache_control: <optional>
 ```
-Adding a provider:
-1. For another Google News sitemap: add an entry with `type: google_news_sitemap` and set headers.  
-2. For new source types: implement `pkg/providers.Fetcher`, register it in `pkg/providers.DefaultFetcherRegistry`, and use its type (or provider id override) in config.
+
+### Adding a provider
+
+1. **Another Google News sitemap**
+   Add a new entry with `type: google_news_sitemap` and required headers.
+
+2. **A new provider type**
+
+   * Implement `pkg/providers.Fetcher`
+   * Register it in `pkg/providers.DefaultFetcherRegistry`
+   * Use its type (or override provider ID) in config
+
+The fetcher interface ensures each provider stays isolated and pluggable.
+
+---
 
 ## Publishers
-Publishers live in `configs/publishers.yaml` (YAML or JSON). There are two `type` values:
-- `queue` with `queue.provider`: `aws-sqs`, `aws-sns`, or `gcp`
-- `http` for webhooks
 
-Example covering all kinds:
+Publishers live in `configs/publishers.yaml` (YAML or JSON).
+
+Two top-level `type` values:
+
+* `queue` (with `queue.provider`: `aws-sqs`, `aws-sns`, or `gcp`)
+* `http` (generic webhook)
+
+**Example (SQS):**
+
 ```yaml
 publishers:
   - id: aws-sqs-queue
@@ -61,20 +134,61 @@ publishers:
         secret_access_key: "${AWS_SQS_SECRET_ACCESS_KEY}"
 ```
 
-Unknown or disabled types are ignored at runtime. Use env expansion in YAML for secrets; never commit real credentials.
+Unknown or disabled publishers are ignored cleanly at runtime.
 
-## Storage / deduplication
-Default storage uses BoltDB (`STORAGE_TYPE=bbolt`, `BBOLT_PATH=./data/cache.db`) to remember published article IDs and skip re-sending. Set `STORAGE_TYPE=none` to disable dedupe. Control retention via `STORAGE_TTL_SECONDS` and cleanup cadence via `STORAGE_CLEANUP_INTERVAL_SECONDS`.
+Secrets should always be set via env vars — never committed.
+
+---
+
+## Storage / Deduplication
+
+The default dedupe backend is BoltDB.
+
+Env vars:
+
+* `STORAGE_TYPE=bbolt`
+* `BBOLT_PATH=./data/cache.db`
+* `STORAGE_TTL_SECONDS` controls retention
+* `STORAGE_CLEANUP_INTERVAL_SECONDS` controls cleanup cadence
+
+Disable dedupe with:
+
+```
+STORAGE_TYPE=none
+```
+
+---
 
 ## Development
-- Run `go test ./...` before sending changes (tests are welcome).
-- Keep changes small and focused; one provider per file and register via the fetcher registry to preserve pluggability.
-- Logging uses zap; publishers and providers accept injected clients for easier testing/mocking.
-- Enable the bundled pre-commit hook (runs gofmt on staged Go files): `make hooks`
 
-## Contributing & sharing
-Issues and PRs are very welcome, especially around:
-- New providers (RSS/sitemaps), backoff/retry helpers, scheduler wiring, and non-Bolt storage options.
-- Additional publishers (Azure Service Bus, Kafka, etc.).
+* Run tests before sending changes:
 
-Feel free to open an issue before a PR if you want to give or get quick feedback on scope or approach.
+  ```bash
+  go test ./...
+  ```
+
+* Keep PRs small and focused. Prefer one provider per file and register via the fetcher registry.
+
+* Logging uses `zap`.
+
+* Provider and publisher implementations accept injected clients to make testing and mocking easy.
+
+* Enable pre-commit formatting:
+
+  ```bash
+  make hooks
+  ```
+
+---
+
+## Contributing
+
+Issues and PRs are welcome — especially for:
+
+* New providers (RSS, additional sitemap flavors)
+* Retry/backoff helpers and scheduler improvements
+* Non-Bolt storage options
+* Additional publishers (Kafka, Azure Service Bus, etc.)
+
+If you're unsure about scope, open an issue first — maintainers (me) reply quickly.
+

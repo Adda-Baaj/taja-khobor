@@ -3,8 +3,8 @@ package providers
 import (
 	"context"
 
-	"github.com/Adda-Baaj/taja-khobor/internal/domain"
-	"github.com/Adda-Baaj/taja-khobor/pkg/httpclient"
+	"github.com/samvad-hq/samvad-news-harvester/internal/domain"
+	"github.com/samvad-hq/samvad-news-harvester/pkg/httpclient"
 )
 
 // Fetcher defines the interface for news provider fetchers.
