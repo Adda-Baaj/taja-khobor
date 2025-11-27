@@ -1,4 +1,8 @@
-# `samvad-news-harvester`
+# `samvad-news-harvester` 
+
+
+[![CI](https://github.com/samvad-hq/samvad-news-harvester/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+
 
 **Samvad News Harvester** is a tiny Go service that fetches news links from provider feeds, enriches them with lightweight metadata, and fans structured events out to queues or webhooks.
 It is intentionally small, pluggable, and welcoming to new contributors.
