@@ -39,8 +39,8 @@ type googleNewsSitemap struct {
 
 type googleNewsURL struct {
 	Loc    string            `xml:"loc"`
-	News   googleNewsDetail  `xml:"news"`
-	Images []googleNewsImage `xml:"image:image"`
+	News   googleNewsDetail  `xml:"http://www.google.com/schemas/sitemap-news/0.9 news"`
+	Images []googleNewsImage `xml:"http://www.google.com/schemas/sitemap-image/1.1 image"`
 }
 
 type sitemapIndex struct {
@@ -52,14 +52,14 @@ type sitemapIndexEntry struct {
 }
 
 type googleNewsDetail struct {
-	PublicationDate string `xml:"publication_date"`
-	Keywords        string `xml:"keywords"`
-	Title           string `xml:"title"`
+	PublicationDate string `xml:"http://www.google.com/schemas/sitemap-news/0.9 publication_date"`
+	Keywords        string `xml:"http://www.google.com/schemas/sitemap-news/0.9 keywords"`
+	Title           string `xml:"http://www.google.com/schemas/sitemap-news/0.9 title"`
 }
 
 type googleNewsImage struct {
-	Loc   string `xml:"image:loc"`
-	Title string `xml:"image:title"`
+	Loc   string `xml:"http://www.google.com/schemas/sitemap-image/1.1 loc"`
+	Title string `xml:"http://www.google.com/schemas/sitemap-image/1.1 title"`
 }
 
 // parseGoogleNewsSitemap parses the XML data into a slice of googleNewsURL structs.
