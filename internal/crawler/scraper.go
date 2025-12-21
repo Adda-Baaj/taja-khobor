@@ -146,7 +146,7 @@ func (s *Scraper) fetchAndParse(ctx context.Context, cfg providers.Provider, art
 
 	body := resp.Body()
 	if len(body) > maxHTMLBodyBytes {
-		s.log.InfoObj("html body truncated", "truncation", map[string]any{
+		s.log.DebugObj("html body truncated", "truncation", map[string]any{
 			"worker_id":   workerID,
 			"provider_id": cfg.ID,
 			"url":         art.URL,

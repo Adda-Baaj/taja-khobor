@@ -153,7 +153,7 @@ func parsePublicationDate(raw string) time.Time {
 	}
 
 	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		return t
+		return t.UTC()
 	}
 
 	return time.Time{}
